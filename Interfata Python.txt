@@ -1,0 +1,194 @@
+import mysql.connector as conn
+import os
+import sys
+
+# Conectare la baza de date
+baza_de_date = conn.connect(
+    host="localhost",
+    user="root",
+    passwd="1234567890Bibi!",
+    database="biblioteca"
+)
+
+curs = baza_de_date.cursor()
+
+# Funcție de citire simplă
+def citire():
+    print("Selectați un tabel din următoarele:")
+    curs.execute("SHOW TABLES")
+    tabele = [tabel[0] for tabel in curs.fetchall()]
+    print("Tabele disponibile:", tabele)
+
+    tabel_selectat = input("Introduceți numele tabelului dorit: ")
+    if tabel_selectat in tabele:
+        cod = f"SELECT * FROM {tabel_selectat}"
+        try:
+            curs.execute(cod)
+            rez = curs.fetchall()
+            if rez:
+                for rand in rez:
+                    print(rand)
+            else:
+                print(f"Tabelul {tabel_selectat} este gol.")
+        except conn.Error as err:
+            print("Eroare MySQL:", err)
+    else:
+        print("Tabelul introdus nu există.")
+
+# Funcție de citire cu sortare
+def citire_cu_sortare():
+    print("Selectați un tabel din următoarele:")
+    curs.execute("SHOW TABLES")
+    tabele = [tabel[0] for tabel in curs.fetchall()]
+    print("Tabele disponibile:", tabele)
+
+    tabel_selectat = input("Introduceți numele tabelului dorit: ")
+    if tabel_selectat in tabele:
+        curs.execute(f"DESCRIBE {tabel_selectat}")
+        coloane = [coloana[0] for coloana in curs.fetchall()]
+        print("Coloane disponibile:", coloane)
+
+        coloana_sortare = input("Introduceți numele coloanei după care doriți să sortați: ")
+        if coloana_sortare not in coloane:
+            print("Coloana introdusă nu există în tabel.")
+            return
+
+        alegere = input("Doriți să sortați ascendent (0) sau descendent (1)? ")
+        if alegere == "0":
+            cod = f"SELECT * FROM {tabel_selectat} ORDER BY {coloana_sortare} ASC"
+        elif alegere == "1":
+            cod = f"SELECT * FROM {tabel_selectat} ORDER BY {coloana_sortare} DESC"
+        else:
+            print("Opțiunea introdusă este invalidă.")
+            return
+
+        try:
+            curs.execute(cod)
+            rez = curs.fetchall()
+            if rez:
+                for rand in rez:
+                    print(rand)
+            else:
+                print(f"Tabelul {tabel_selectat} nu are date de afișat.")
+        except conn.Error as err:
+            print("Eroare MySQL:", err)
+    else:
+        print("Tabelul introdus nu există.")
+
+def modificare_informatii():
+    print("Selectați un tabel pentru a modifica datele:")
+    curs.execute("SHOW TABLES")
+    tabele = [tabel[0] for tabel in curs.fetchall()]
+    print("Tabele disponibile:", tabele)
+
+    tabel_selectat = input("Introduceți numele tabelului dorit: ")
+    if tabel_selectat in tabele:
+        curs.execute(f"DESCRIBE {tabel_selectat}")
+        coloane = [coloana[0] for coloana in curs.fetchall()]
+        print("Coloane disponibile:", coloane)
+
+        optiune = input("Alegeți acțiunea dorită: (1) Editare, (2) Ștergere: ")
+        if optiune == "1":  # Editare
+            coloana_modificare = input("Introduceți numele coloanei pe care doriți să o modificați: ")
+            if coloana_modificare not in coloane:
+                print("Coloana introdusă nu există.")
+                return
+
+            valoare_noua = input("Introduceți valoarea nouă: ")
+            coloana_identificare = input("Introduceți numele coloanei pentru identificare: ")
+            valoare_identificare = input("Introduceți valoarea de identificare: ")
+
+            try:
+                cod = f"UPDATE {tabel_selectat} SET {coloana_modificare} = '{valoare_noua}' WHERE {coloana_identificare} = '{valoare_identificare}'"
+                curs.execute(cod)
+                baza_de_date.commit()
+                print("Actualizarea a fost realizată cu succes.")
+            except conn.Error as err:
+                print("Eroare MySQL:", err)
+        elif optiune == "2":  # Ștergere
+            coloana_identificare = input("Introduceți numele coloanei pentru identificare: ")
+            valoare_identificare = input("Introduceți valoarea de identificare: ")
+
+            try:
+                cod = f"DELETE FROM {tabel_selectat} WHERE {coloana_identificare} = '{valoare_identificare}'"
+                curs.execute(cod)
+                baza_de_date.commit()
+                print("Ștergerea a fost realizată cu succes.")
+            except conn.Error as err:
+                print("Eroare MySQL:", err)
+        else:
+            print("Opțiune invalidă.")
+    else:
+        print("Tabelul introdus nu există.")
+
+def afisare_informatii_complexe():
+    #afiseaza informatii despre cartile disponibile, autorii lor si publicatiile pentru carti cu numarul de pagini mai mare decat 200
+    #si unde publicatia este fondata dupa anul 1990
+    print("Afișarea cărților disponibile, autorii lor și publicațiile aferente (filtrate).")
+    cod = """
+    SELECT c.titlu_carte, a.nume_autor, p.nume_publicatie FROM carti c JOIN colaborare col ON c.cod_isbn = col.cod_isbn JOIN autori a ON col.id_autor = a.id_autor
+    JOIN publicatii p ON c.id_publicatie = p.id_publicatie WHERE c.nr_pagini > 200 AND p.an_infiintare > 1990;
+    """
+    try:
+        curs.execute(cod)
+        rezultate = curs.fetchall()
+        if rezultate:
+            for rand in rezultate:
+                print(f"Carte: {rand[0]}, Autor: {rand[1]}, Publicație: {rand[2]}")
+        else:
+            print("Nu există date care să corespundă condițiilor specificate.")
+    except conn.Error as err:
+        print("Eroare MySQL:", err)
+
+def afisare_statistici_grup_having():
+    print("Afișarea autorilor care au scris mai mult de două cărți.")
+    cod = """
+    SELECT a.nume_autor, COUNT(c.cod_isbn) AS numar_carti FROM autori a JOIN colaborare col ON a.id_autor = col.id_autor JOIN carti c ON col.cod_isbn = c.cod_isbn
+    GROUP BY a.nume_autor HAVING COUNT(c.cod_isbn) > 2 ORDER BY numar_carti DESC;
+    """
+    try:
+        curs.execute(cod)
+        rezultate = curs.fetchall()
+        if rezultate:
+            for rand in rezultate:
+                print(f"Autor: {rand[0]}, Număr cărți: {rand[1]}")
+        else:
+            print("Nu există autori care au scris mai mult de două cărți.")
+    except conn.Error as err:
+        print("Eroare MySQL:", err)
+
+# Meniu principal
+def afisare_meniu():
+    print("\n=== Meniu Principal ===")
+    print("1. Citire simplă")
+    print("2. Citire cu sortare")
+    print("3. Modificare informații (edit/ștergere)")
+    print("4. Afișare informații complexe (din 3 tabele, cu 2 condiții)")
+    print("5. Afișare statistici grup (funcții grup și HAVING)")
+    print("6. Ieșire")
+
+def rulare_interfata():
+    while True:
+        afisare_meniu()
+        optiune = input("Selectați o opțiune: ")
+
+        if optiune == '1':
+            citire()
+        elif optiune == '2':
+            citire_cu_sortare()
+        elif optiune == '3':
+            modificare_informatii()
+        elif optiune == '4':
+            afisare_informatii_complexe()
+        elif optiune == '5':
+            afisare_statistici_grup_having()
+        elif optiune == '6':
+            print("La revedere!")
+            curs.close()
+            baza_de_date.close()
+            sys.exit()
+        else:
+            print("Opțiune invalidă. Reîncercați.")
+
+# Rularea aplicației
+rulare_interfata()
